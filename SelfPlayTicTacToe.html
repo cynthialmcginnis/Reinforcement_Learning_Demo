@@ -161,7 +161,6 @@ function agentMove(){
   const q = getQ(key);
   const empties = emptyCells(board);
   if(empties.length === 0) return;
-  // epsilon-greedy at play time too, but mostly greedy since this is "showing off" trained knowledge
   let best = empties[0];
   let bestVal = -Infinity;
   empties.forEach(i => { if(q[i] > bestVal){ bestVal = q[i]; best = i; } });
@@ -211,7 +210,6 @@ function playSelfPlayGame(){
     b[action] = turn;
     const w = checkWinner(b);
     if(w !== 0){
-      // assign terminal rewards and back-propagate with simple TD update
       const rewardFor1 = w===1 ? 1 : (w===3 ? 0 : -1);
       const rewardFor2 = w===2 ? 1 : (w===3 ? 0 : -1);
       updateHistory(history1, rewardFor1);
@@ -222,15 +220,51 @@ function playSelfPlayGame(){
   }
 }
 
+// ---------- Board symmetries ----------
+// A tic-tac-toe board has 8 equivalent versions (4 rotations x mirror).
+// Learning something in one version should teach the agent all 8 at once,
+// since they are the same strategic situation. Without this, the agent
+// only learns the exact board layouts it happens to wander into, which is
+// too sparse to reliably learn something as basic as blocking a line.
+function cellTransform(i, kind){
+  const r = Math.floor(i/3), c = i%3;
+  let nr, nc;
+  if(kind === "rot90"){ nr = c; nc = 2-r; }
+  else if(kind === "rot180"){ nr = 2-r; nc = 2-c; }
+  else if(kind === "rot270"){ nr = 2-c; nc = r; }
+  else if(kind === "flip"){ nr = r; nc = 2-c; }
+  else if(kind === "flipRot90"){ nr = c; nc = r; }
+  else if(kind === "flipRot180"){ nr = 2-r; nc = c; }
+  else if(kind === "flipRot270"){ nr = 2-c; nc = 2-r; }
+  else { nr = r; nc = c; } // identity
+  return nr*3 + nc;
+}
+const symmetryKinds = ["identity","rot90","rot180","rot270","flip","flipRot90","flipRot180","flipRot270"];
+function symmetricVariants(boardArr, action){
+  return symmetryKinds.map(kind => {
+    const perm = [0,1,2,3,4,5,6,7,8].map(i => cellTransform(i, kind));
+    const newBoard = new Array(9).fill(0);
+    for(let i=0;i<9;i++) newBoard[perm[i]] = boardArr[i];
+    return { key: newBoard.join(""), action: perm[action] };
+  });
+}
+
 function updateHistory(history, finalReward){
   const alpha = 0.3;
-  // propagate backward: last move gets the terminal reward directly,
-  // earlier moves get a discounted version of what followed
   let nextValue = finalReward;
   for(let i=history.length-1; i>=0; i--){
     const {key, action} = history[i];
+    const boardArr = key.split("").map(Number);
+    const variants = symmetricVariants(boardArr, action);
+    // Update the real state first so we have its new value for the backward chain.
     const q = getQ(key);
     q[action] = q[action] + alpha * (nextValue - q[action]);
+    // Teach the same lesson to all 7 equivalent rotations/reflections.
+    variants.forEach(v => {
+      if(v.key === key) return;
+      const vq = getQ(v.key);
+      vq[v.action] = vq[v.action] + alpha * (nextValue - vq[v.action]);
+    });
     nextValue = q[action] * 0.9;
   }
 }
