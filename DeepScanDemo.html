@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Deep Scan: Finding the Cloaked Fleet</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; background: #F2F6FA; margin: 0; padding: 0; color: #1a1a1a; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 24px 24px 60px 24px; }
+  header { background: #003366; color: #ffffff; padding: 24px 28px; border-bottom: 6px solid #F2A900; }
+  header h1 { margin: 0 0 6px 0; font-size: 26px; }
+  header p { margin: 0; font-size: 15px; color: #d9e6f2; }
+  .story { background: #0d1b2e; color: #cfe0f2; padding: 18px 24px; font-size: 14px; line-height: 1.7; font-style: italic; border-bottom: 6px solid #F2A900; }
+  .story p { margin: 0 0 12px 0; }
+  .story p:last-child { margin-bottom: 0; }
+  .logentry {
+    background: #0d1b2e; color: #cfe0f2; padding: 12px 18px; font-size: 13px; line-height: 1.5;
+    font-style: italic; border-left: 4px solid #F2A900; border-radius: 4px; margin-bottom: 16px;
+  }
+  .logentry b { color: #F2A900; font-style: normal; letter-spacing: 0.5px; }
+  section { background: #ffffff; border: 1px solid #cdd8e3; border-radius: 6px; padding: 20px 24px; margin-top: 20px; }
+  h2 { color: #003366; font-size: 19px; margin-top: 0; border-bottom: 2px solid #F2A900; padding-bottom: 6px; }
+  .question-box { background: #F2F6FA; border-left: 6px solid #F2A900; padding: 14px 18px; font-size: 16px; line-height: 1.5; }
+  .layout { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+  .board { display: grid; grid-template-columns: repeat(10, 32px); grid-template-rows: repeat(10, 32px); gap: 2px; background: #003366; padding: 3px; border-radius: 6px; }
+  .cell { background: #0d2645; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; color: #6f9fd8; position: relative; }
+  .cell.miss { background: #1a1a1a; color: #555; }
+  .cell.hit { background: #F2A900; color: #003366; }
+  .cell.sunk { background: #b3362f; color: #ffffff; }
+  .heatval { position: absolute; bottom: 1px; right: 2px; font-size: 8px; color: #F2A900; }
+  .controls { flex: 1; min-width: 260px; }
+  .sliderRow { margin-bottom: 14px; font-size: 13px; }
+  .sliderRow label { display: block; margin-bottom: 3px; font-weight: bold; color: #003366; }
+  input[type=range] { width: 100%; }
+  button { background: #003366; color: #ffffff; border: none; padding: 9px 14px; border-radius: 4px; font-size: 13px; cursor: pointer; margin-right: 8px; margin-bottom: 8px; }
+  button:hover { background: #024a8f; }
+  button.secondary { background: #ffffff; color: #003366; border: 2px solid #003366; }
+  button.secondary:hover { background: #F2F6FA; }
+  .statline { font-size: 14px; margin: 4px 0; }
+  .statline span { font-weight: bold; color: #003366; }
+  #log { background: #F2F6FA; border: 1px solid #cdd8e3; border-radius: 4px; padding: 10px; height: 120px; overflow-y: auto; font-size: 12px; font-family: Consolas, monospace; margin-top: 10px; }
+  .term { border: 1px solid #cdd8e3; border-radius: 6px; padding: 12px 14px; margin-bottom: 10px; background: #F2F6FA; }
+  .term b { color: #003366; }
+  canvas { border: 1px solid #cdd8e3; background: #fff; width: 100%; max-width: 860px; height: 160px; }
+  .legend { font-size: 12px; margin-top: 8px; color: #333; }
+  .legend span.swatch { display: inline-block; width: 14px; height: 14px; margin-right: 5px; vertical-align: middle; border: 1px solid #999; border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Deep Scan: Finding the Cloaked Fleet</h1>
+  <p>Unit 4: Computer/Machine Vision and Reinforcement Learning</p>
+</header>
+
+<div class="story">
+  <p><b style="color:#F2A900; font-style:normal;">COMMAND LOG, SECTOR 7-DELTA.</b> The Sovereign Fleet returned to this system three cycles ago. Their warships run under a full cloaking veil, a field that bends every wavelength your sensors can read. No silhouette. No shadow. No image at all, which means the computer vision systems that serve this ship so well everywhere else are worthless here. There is nothing to look at.</p>
+  <p>What you do have is a single tactical scanner. Point it at one grid sector, and it tells you exactly one thing: contact, or nothing. That is the entire information budget you have to work with, sector by sector, ping by ping.</p>
+  <p>Here is the one thing working in your favor. Fleet Command's after-action reports go back six deployments, and every one of them shows the same thing: the Sovereign Fleet's commanders are creatures of pure habit. Same three ships. Same formation. Every single time, as if daring anyone to notice. They are certain that no one can learn a pattern they cannot even see.</p>
+  <p>Your job is to prove them wrong. Not by seeing the fleet, you can't, but by remembering. Every ping you send teaches the targeting system something the enemy assumes you will forget by the next sweep. Sweep after sweep, if you keep score and adjust, that memory becomes a map, and that map becomes a report Fleet Command can act on.</p>
+</div>
+
+<section>
+  <h2>Step 1: Run an Untrained Scan</h2>
+  <div class="logentry"><b>SCANNER LOG — SWEEP 1.</b> Systems are online, but the targeting computer has no data yet. It knows nothing about this sector except what the scanner reports back, one ping at a time, and it has never pinged this sector before. Watch it work blind.</div>
+  <p>The formation below never changes between sweeps, the same ten by ten sector, the same five hidden ships, every single time. Watch a scanner with no memory and no strategy ping the sector at random.</p>
+  <div class="layout">
+    <div class="board" id="randomBoard"></div>
+    <div class="controls">
+      <button class="secondary" id="randomRunBtn">Run Untrained Scan</button>
+      <div class="statline">Pings used to locate the full fleet: <span id="randomGuesses">-</span></div>
+      <div class="legend">
+        <span class="swatch" style="background:#0d2645;"></span> unexplored
+        <span class="swatch" style="background:#1a1a1a;"></span> miss
+        <span class="swatch" style="background:#F2A900;"></span> hit, ship not fully found yet
+        <span class="swatch" style="background:#b3362f;"></span> sinking hit, ship fully located
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Step 2: The Question This Demo Answers</h2>
+  <div class="question-box">
+    Your scanner never sees the fleet directly. All it ever gets back from a ping is contact or nothing, one sector at a time. But because the enemy redeploys in the identical formation every sweep, the same sectors that mattered last time matter again this time.
+    <br><br>
+    Can a system learn, purely from the pattern of past contacts and misses, exactly which sectors to check first, until it can report the fleet's position almost immediately?
+  </div>
+</section>
+
+<section>
+  <h2>Step 3: Train the Targeting System</h2>
+  <div class="logentry"><b>SCANNER LOG — AFTER SWEEP 1.</b> The good news: the ships are still exactly where they were. The Sovereign Fleet did not move, and after action reports confirm they never do. Every sweep against this same sector is a chance for the targeting computer to remember what worked last time and try it again first. Run enough sweeps, and see what it learns.</div>
+  <p>Once a ping finds a contact, checking the sectors next to it is simply sound tactics, not something that needed to be learned. What genuinely gets learned here, sweep after sweep, is which sectors of the grid are worth checking first, because this enemy never moves.</p>
+  <div class="layout">
+    <div class="board" id="trainedBoard"></div>
+    <div class="controls">
+      <div class="legend">
+        <span class="swatch" style="background:#0d2645;"></span> unexplored
+        <span class="swatch" style="background:#1a1a1a;"></span> miss
+        <span class="swatch" style="background:#F2A900;"></span> hit, ship not fully found yet
+        <span class="swatch" style="background:#b3362f;"></span> sinking hit, ship fully located
+      </div>
+      <div class="sliderRow" style="margin-top:10px;">
+        <label>Exploration rate (epsilon): <span id="epsilonVal">0.2</span></label>
+        <input type="range" id="epsilonSlider" min="0" max="1" step="0.05" value="0.2">
+        <div style="font-size:12px; color:#555; margin-top:4px; font-style:italic;">
+          Epsilon controls how often the targeting computer ignores its own current favorite sector and pings a random one instead, purely to keep checking whether it's wrong. At epsilon 0 it always trusts its best guess so far, even a lucky early one it never double-checks. At epsilon 1 it never trusts its own data at all and pings at random forever. Try both extremes, then something in between, and watch the learning curve below change shape.
+        </div>
+      </div>
+      <button id="train20Btn">Run 20 Sweeps</button>
+      <button id="train200Btn">Run 200 Sweeps (fast)</button>
+      <button class="secondary" id="resetBtn">Reset Targeting System</button>
+      <div class="statline">Sweeps completed: <span id="gamesCount">0</span></div>
+      <label style="font-size:13px; font-weight:bold; color:#003366; display:block; margin-top:8px;">
+        <input type="checkbox" id="showHeat"> Show learned sector values (Intelligence Map)
+      </label>
+      <button class="secondary" id="watchBtn">Report: Run One Trained Sweep</button>
+      <div id="log"></div>
+    </div>
+  </div>
+  <div style="margin-top:16px;">
+    <div style="font-size:14px; font-weight:bold; color:#003366; margin-bottom:6px;">Ship Cells Found Per Training Sortie (Higher Is Better, Max 17)</div>
+    <canvas id="chart" width="860" height="160"></canvas>
+    <div style="font-size:12px; color:#555; margin-top:4px;">Each training sortie only has fuel for 18 pings before it has to turn back, so no single run can cover the whole sector. The Q-table remembers what every past sortie found, though, which is the only reason this number can climb at all.</div>
+  </div>
+</section>
+
+<section>
+  <h2>Step 4: Why This Works So Well</h2>
+  <p>Compare this to the earlier reinforcement learning demos in this unit. In the grid-world maze, every training episode started from the same maze, so the agent could learn exact cell values too. But in a version of this exact game where the fleet redeploys to a new random formation every single sweep, memorizing specific sectors would be worthless, since last sweep's contacts tell you nothing about this sweep's hidden ships. What actually makes this demo work is the enemy's own predictability. An adversary who never changes their pattern is, from a learning system's point of view, the easiest possible adversary to beat. That is a genuine tactical lesson as much as a technical one: predictability is a vulnerability, whether the thing exploiting it is a person or a trained model.</p>
+</section>
+
+<div class="logentry"><b>MISSION DEBRIEF.</b> File this for Fleet Command: the enemy was never actually hidden. They were only unseen. A system that cannot look can still learn, provided the world it is acting in holds still long enough to be remembered. The Sovereign Fleet's discipline, the very thing meant to make them look disciplined and unreadable, is exactly what made them predictable enough to learn against. A habit defended once is still a habit. Repeat it against something that remembers, and it stops being a defense at all.</div>
+
+<section>
+  <h2>Vocabulary: What Each Term Means Here</h2>
+  <div class="term"><b>State:</b> here, unusually, the state that matters most is simply which sector is about to be pinged, since the same fixed formation lies underneath every sweep.</div>
+  <div class="term"><b>Action:</b> pinging one specific sector.</div>
+  <div class="term"><b>Reward:</b> a positive number for a contact, a small negative number for nothing, credited immediately after each individual ping rather than only at the end of a sweep.</div>
+  <div class="term"><b>Q-value:</b> the learned value of pinging a specific sector, built up across many sweeps against the same fixed formation. Watch the Intelligence Map in Step 3: over enough training, the brightest sectors on that map should start to trace the actual outline of the hidden fleet.</div>
+  <div class="term"><b>Epsilon (exploration rate):</b> the probability, on any given ping, that the targeting computer ignores its current best guess and checks a random sector instead. This is the same exploration-versus-exploitation tradeoff from the slot machine demo earlier in this unit, just applied to a grid instead of four levers. Too low, and an early lucky or unlucky ping can lock in a bad habit permanently. Too high, and the system never settles down enough to actually use what it has learned.</div>
+</section>
+
+</div>
+
+<script>
+const SIZE = 10;
+
+// Fixed formation: the same every sweep, representing the enemy's unchanging deployment.
+const FIXED_SHIPS = [
+  { cells: [ [2,2],[2,3],[2,4],[2,5],[2,6] ] },  // length 5
+  { cells: [ [1,8],[2,8],[3,8],[4,8] ] },        // length 4
+  { cells: [ [7,0],[7,1],[7,2] ] },              // length 3
+  { cells: [ [5,5],[6,5],[7,5] ] },              // length 3
+  { cells: [ [9,7],[9,8] ] },                    // length 2
+];
+function idx(r,c){ return r*SIZE+c; }
+function inBounds(r,c){ return r>=0 && r<SIZE && c>=0 && c<SIZE; }
+
+function buildFixedFleet(){
+  return FIXED_SHIPS.map(s => ({
+    cells: s.cells.map(([r,c]) => idx(r,c)),
+    length: s.cells.length,
+    hits: new Set(),
+  }));
+}
+
+let Q = new Array(SIZE*SIZE).fill(0);
+
+function shipAt(ships, cellIdx){ return ships.find(s => s.cells.includes(cellIdx)); }
+function isSunk(ship){ return ship.hits.size === ship.length; }
+function allSunk(ships){ return ships.every(isSunk); }
+
+// Plays one full sweep. useQ: pick hunt-mode pings via epsilon-greedy over Q. Otherwise pure random.
+// pingBudget: optional cap on pings (simulates a fuel-limited reconnaissance sortie during training).
+function playSweep(useQ, epsilon, learn, recordTrace, pingBudget){
+  const budget = pingBudget || Infinity;
+  const ships = buildFixedFleet();
+  const guessed = new Set();
+  let targets = [];
+  let direction = null;
+  let currentShipHits = [];
+  let guesses = 0;
+  const trace = [];
+  const alpha = 0.3;
+
+  function randomUnguessed(){
+    const remaining = [];
+    for(let i=0;i<SIZE*SIZE;i++) if(!guessed.has(i)) remaining.push(i);
+    return remaining.length ? remaining[Math.floor(Math.random()*remaining.length)] : null;
+  }
+  function huntPick(){
+    if(!useQ) return randomUnguessed();
+    if(Math.random() < epsilon) return randomUnguessed();
+    let best = null, bestVal = -Infinity;
+    for(let i=0;i<SIZE*SIZE;i++){
+      if(guessed.has(i)) continue;
+      if(Q[i] > bestVal){ bestVal = Q[i]; best = i; }
+    }
+    return best;
+  }
+
+  while(!allSunk(ships) && guesses < SIZE*SIZE && guesses < budget){
+    let cellIdx;
+    if(useQ && targets.length > 0){
+      cellIdx = targets.shift();
+      while(cellIdx !== undefined && guessed.has(cellIdx)) cellIdx = targets.shift();
+      if(cellIdx === undefined) cellIdx = huntPick();
+    } else {
+      cellIdx = huntPick();
+    }
+    if(cellIdx === null || cellIdx === undefined) break;
+    guessed.add(cellIdx);
+    guesses++;
+    const r = Math.floor(cellIdx/SIZE), c = cellIdx % SIZE;
+    const ship = shipAt(ships, cellIdx);
+    let result;
+    let reward;
+    if(ship){
+      ship.hits.add(cellIdx);
+      currentShipHits.push({r,c});
+      reward = 3;
+      if(isSunk(ship)){
+        result = "sunk";
+        targets = []; currentShipHits = []; direction = null;
+      } else {
+        result = "hit";
+        if(useQ){
+          if(currentShipHits.length === 1){
+            [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dr,dc])=>{
+              const nr=r+dr, nc=c+dc;
+              if(inBounds(nr,nc) && !guessed.has(idx(nr,nc))) targets.push(idx(nr,nc));
+            });
+          } else {
+            const h0 = currentShipHits[0], h1 = currentShipHits[currentShipHits.length-1];
+            if(!direction){ direction = {dr: Math.sign(h1.r-h0.r), dc: Math.sign(h1.c-h0.c)}; targets = []; }
+            const forward = {r: h1.r+direction.dr, c: h1.c+direction.dc};
+            const backward = {r: h0.r-direction.dr, c: h0.c-direction.dc};
+            if(inBounds(backward.r,backward.c) && !guessed.has(idx(backward.r,backward.c))) targets.unshift(idx(backward.r,backward.c));
+            if(inBounds(forward.r,forward.c) && !guessed.has(idx(forward.r,forward.c))) targets.unshift(idx(forward.r,forward.c));
+          }
+        }
+      }
+    } else {
+      result = "miss";
+      reward = -1;
+    }
+    if(learn){
+      Q[cellIdx] = Q[cellIdx] + alpha * (reward - Q[cellIdx]);
+    }
+    if(recordTrace) trace.push({r,c,result});
+  }
+  const shipCellsFound = ships.reduce((sum,s)=>sum+s.hits.size, 0);
+  const totalShipCells = ships.reduce((sum,s)=>sum+s.length, 0);
+  return { guesses, trace, shipCellsFound, totalShipCells };
+}
+
+// ---------- Board rendering ----------
+function buildBoard(holderId){
+  const holder = document.getElementById(holderId);
+  holder.innerHTML = "";
+  for(let i=0;i<SIZE*SIZE;i++){
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    cell.id = holderId+"_c"+i;
+    holder.appendChild(cell);
+  }
+}
+function resetBoardVisual(holderId){
+  for(let i=0;i<SIZE*SIZE;i++){
+    const el = document.getElementById(holderId+"_c"+i);
+    el.className = "cell";
+    el.innerHTML = "";
+  }
+}
+function paintCell(holderId, r, c, result){
+  const el = document.getElementById(holderId+"_c"+idx(r,c));
+  if(result === "miss"){ el.className = "cell miss"; el.textContent = "·"; }
+  else if(result === "hit"){ el.className = "cell hit"; el.textContent = "X"; }
+  else if(result === "sunk"){ el.className = "cell sunk"; el.textContent = "X"; }
+}
+function renderHeatmap(holderId){
+  const show = document.getElementById("showHeat").checked;
+  const maxQ = Math.max(...Q, 0.1);
+  for(let i=0;i<SIZE*SIZE;i++){
+    const el = document.getElementById(holderId+"_c"+i);
+    const existingHeat = el.querySelector(".heatval");
+    if(existingHeat) existingHeat.remove();
+    if(show && !el.classList.contains("hit") && !el.classList.contains("sunk") && !el.classList.contains("miss")){
+      const intensity = Math.max(0, Q[i]/maxQ);
+      el.style.background = "rgba(242,169,0,"+(0.08+intensity*0.55)+")";
+      const label = document.createElement("div");
+      label.className = "heatval";
+      label.textContent = Q[i].toFixed(1);
+      el.appendChild(label);
+    } else if(!el.classList.contains("hit") && !el.classList.contains("sunk") && !el.classList.contains("miss")){
+      el.style.background = "";
+    }
+  }
+}
+
+buildBoard("randomBoard");
+buildBoard("trainedBoard");
+
+document.getElementById("randomRunBtn").addEventListener("click", function(){
+  resetBoardVisual("randomBoard");
+  const result = playSweep(false, 0, false, true);
+  let i = 0;
+  function animate(){
+    if(i >= result.trace.length){ document.getElementById("randomGuesses").textContent = result.guesses; return; }
+    const p = result.trace[i];
+    paintCell("randomBoard", p.r, p.c, p.result);
+    i++;
+    setTimeout(animate, 70);
+  }
+  animate();
+});
+
+// ---------- Step 3 ----------
+let gamesCount = 0;
+let guessHistory = [];
+const epsilonSlider = document.getElementById("epsilonSlider");
+epsilonSlider.addEventListener("input", ()=> document.getElementById("epsilonVal").textContent = epsilonSlider.value);
+
+function logLine(text){
+  const log = document.getElementById("log");
+  const line = document.createElement("div");
+  line.textContent = text;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+
+function drawChart(){
+  const canvas = document.getElementById("chart");
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0,0,w,h);
+  const data = guessHistory.slice(-200);
+  if(data.length < 2){
+    ctx.fillStyle = "#888"; ctx.font = "13px Arial";
+    ctx.fillText("Run a few sweeps to see the curve.", 12, h/2);
+    return;
+  }
+  const minVal = 0;
+  const maxVal = 17; // total ship cells in the fixed fleet
+  const pad = 24;
+  const xStep = (w-pad*2)/(data.length-1);
+  function yPos(v){ return h-pad-((v-minVal)/(maxVal-minVal))*(h-pad*2); }
+  ctx.strokeStyle = "#cccccc";
+  ctx.setLineDash([4,4]);
+  ctx.beginPath();
+  ctx.moveTo(pad, yPos(17));
+  ctx.lineTo(w-pad, yPos(17));
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = "#888"; ctx.font="11px Arial";
+  ctx.fillText("full fleet: 17 cells", pad, yPos(17)-6);
+  ctx.strokeStyle = "#F2A900";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  data.forEach((v,i)=>{
+    const x = pad+i*xStep, y = yPos(v);
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+}
+
+const TRAIN_PING_BUDGET = 18; // each training sweep only gets a limited number of pings, like a fuel-limited sortie
+
+function trainSweeps(n){
+  const epsilon = parseFloat(epsilonSlider.value);
+  for(let i=0;i<n;i++){
+    const result = playSweep(true, epsilon, true, false, TRAIN_PING_BUDGET);
+    guessHistory.push(result.shipCellsFound);
+    gamesCount++;
+  }
+  document.getElementById("gamesCount").textContent = gamesCount;
+  try { drawChart(); } catch(e){}
+  try { renderHeatmap("trainedBoard"); } catch(e){}
+}
+
+document.getElementById("train20Btn").addEventListener("click", function(){
+  trainSweeps(20);
+  logLine("Ran 20 sweeps. Total sweeps: "+gamesCount);
+});
+document.getElementById("train200Btn").addEventListener("click", function(){
+  trainSweeps(200);
+  logLine("Ran 200 sweeps. Total sweeps: "+gamesCount);
+});
+document.getElementById("resetBtn").addEventListener("click", function(){
+  Q = new Array(SIZE*SIZE).fill(0);
+  gamesCount = 0;
+  guessHistory = [];
+  document.getElementById("gamesCount").textContent = "0";
+  document.getElementById("log").innerHTML = "";
+  resetBoardVisual("trainedBoard");
+  try { drawChart(); } catch(e){}
+});
+document.getElementById("showHeat").addEventListener("change", function(){
+  renderHeatmap("trainedBoard");
+});
+document.getElementById("watchBtn").addEventListener("click", function(){
+  resetBoardVisual("trainedBoard");
+  const result = playSweep(true, 0, false, true);
+  let i = 0;
+  document.getElementById("log").innerHTML = "";
+  logLine("Running a fully trained sweep, no exploration, best known sectors only.");
+  function animate(){
+    if(i >= result.trace.length){
+      logLine("Fleet fully located in "+result.guesses+" pings.");
+      renderHeatmap("trainedBoard");
+      return;
+    }
+    const p = result.trace[i];
+    paintCell("trainedBoard", p.r, p.c, p.result);
+    i++;
+    setTimeout(animate, 100);
+  }
+  animate();
+});
+
+try { drawChart(); } catch(e){}
+</script>
+</body>
+</html>

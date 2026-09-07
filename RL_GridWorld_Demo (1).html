@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Grid World: How an Agent Learns Without Being Told the Answer</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    background: #F2F6FA;
+    margin: 0;
+    padding: 0;
+    color: #1a1a1a;
+  }
+  .wrap {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 24px 24px 60px 24px;
+  }
+  header {
+    background: #003366;
+    color: #ffffff;
+    padding: 24px 28px;
+    border-bottom: 6px solid #F2A900;
+  }
+  header h1 {
+    margin: 0 0 6px 0;
+    font-size: 26px;
+  }
+  header p {
+    margin: 0;
+    font-size: 15px;
+    color: #d9e6f2;
+  }
+  section {
+    background: #ffffff;
+    border: 1px solid #cdd8e3;
+    border-radius: 6px;
+    padding: 20px 24px;
+    margin-top: 20px;
+  }
+  h2 {
+    color: #003366;
+    font-size: 19px;
+    margin-top: 0;
+    border-bottom: 2px solid #F2A900;
+    padding-bottom: 6px;
+  }
+  .question-box {
+    background: #F2F6FA;
+    border-left: 6px solid #F2A900;
+    padding: 14px 18px;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  .layout {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  #gridHolder, #gridHolder2 {
+    position: relative;
+  }
+  .cell {
+    position: absolute;
+    border: 1px solid #b9c7d6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: #003366;
+    font-weight: bold;
+    background: #ffffff;
+  }
+  .wall { background: #003366; }
+  .goal { background: #F2A900; color: #003366; }
+  .pit { background: #b3362f; color: #ffffff; }
+  .agent {
+    position: absolute;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: #003366;
+    border: 3px solid #F2A900;
+    transition: left 0.25s ease, top 0.25s ease;
+    z-index: 5;
+  }
+  .arrow {
+    position: absolute;
+    font-size: 20px;
+    pointer-events: none;
+    z-index: 4;
+  }
+  .controls {
+    flex: 1;
+    min-width: 260px;
+  }
+  .btnrow { margin-bottom: 14px; }
+  button {
+    background: #003366;
+    color: #ffffff;
+    border: none;
+    padding: 9px 14px;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    margin-right: 8px;
+    margin-bottom: 8px;
+  }
+  button:hover { background: #024a8f; }
+  button.secondary {
+    background: #ffffff;
+    color: #003366;
+    border: 2px solid #003366;
+  }
+  button.secondary:hover { background: #F2F6FA; }
+  .sliderRow {
+    margin-bottom: 12px;
+    font-size: 13px;
+  }
+  .sliderRow label {
+    display: block;
+    margin-bottom: 3px;
+    font-weight: bold;
+    color: #003366;
+  }
+  input[type=range] { width: 100%; }
+  .statline {
+    font-size: 14px;
+    margin: 4px 0;
+  }
+  .statline span { font-weight: bold; color: #003366; }
+  #log {
+    background: #F2F6FA;
+    border: 1px solid #cdd8e3;
+    border-radius: 4px;
+    padding: 10px;
+    height: 150px;
+    overflow-y: auto;
+    font-size: 12px;
+    font-family: Consolas, monospace;
+    margin-top: 10px;
+  }
+  .legend {
+    font-size: 12px;
+    margin-top: 10px;
+  }
+  .legend span {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    margin-right: 5px;
+    vertical-align: middle;
+    border: 1px solid #999;
+  }
+  .term {
+    border: 1px solid #cdd8e3;
+    border-radius: 6px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    background: #F2F6FA;
+  }
+  .term b { color: #003366; }
+  .resources ol { padding-left: 20px; }
+  .resources li { margin-bottom: 16px; }
+  .cite { font-size: 12px; color: #444; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Grid World: How an Agent Learns Without Being Told the Answer</h1>
+  <p>Unit 4: Computer/Machine Vision and Reinforcement Learning</p>
+</header>
+
+<section>
+  <h2>Step 1: Watch the Agent With No Training</h2>
+  <p>Below is the environment. The blue circle is the agent. The gold square is the goal. The dark cells are walls it cannot pass through. The red cell is a pit it needs to avoid. Right now, the agent knows none of this. Click the button and watch it move at random.</p>
+  <div class="layout">
+    <div id="gridHolder"></div>
+    <div class="controls">
+      <div class="btnrow">
+        <button class="secondary" id="randomWalkBtn">Run Random Walk (60 moves, no learning)</button>
+      </div>
+      <div class="statline">Total reward so far: <span id="randomReward">0</span></div>
+      <div class="legend">
+        <span style="background:#003366;"></span> wall
+        <span style="background:#F2A900;"></span> goal (+10)
+        <span style="background:#b3362f;"></span> pit (-10)
+        <span style="background:#ffffff;"></span> open (-1 per step)
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Step 2: The Question This Demo Answers</h2>
+  <div class="question-box">
+    The agent does not know where the goal is. It does not know a wall is there until it runs into it. The only information it gets after every move is a single number: the reward. Minus one for an ordinary step. Minus ten for landing in the pit. Plus ten for reaching the goal.
+    <br><br>
+    Can trial and error alone, with nothing but that one number as feedback, teach the agent the shortest safe path to the goal?
+  </div>
+</section>
+
+<section>
+  <h2>Step 3: Train the Agent</h2>
+  <p>Now give the agent a chance to learn. Each training episode starts the agent back at its starting square and lets it run until it reaches the goal, falls in the pit, or hits the step limit. After every move, it updates its estimate of how good that move was in that square. That estimate is called a Q-value.</p>
+  <div class="layout">
+    <div id="gridHolder2"></div>
+    <div class="controls">
+      <div class="sliderRow">
+        <label>Learning rate (alpha): <span id="alphaVal">0.5</span></label>
+        <input type="range" id="alphaSlider" min="0.1" max="1" step="0.1" value="0.5">
+      </div>
+      <div class="sliderRow">
+        <label>Discount factor (gamma): <span id="gammaVal">0.9</span></label>
+        <input type="range" id="gammaSlider" min="0.5" max="0.99" step="0.01" value="0.9">
+      </div>
+      <div class="sliderRow">
+        <label>Exploration rate (epsilon): <span id="epsilonVal">0.3</span></label>
+        <input type="range" id="epsilonSlider" min="0" max="1" step="0.05" value="0.3">
+      </div>
+      <div class="btnrow">
+        <button id="train1Btn">Train 1 Episode (animated)</button>
+        <button id="train100Btn">Train 100 Episodes (fast)</button>
+        <button class="secondary" id="resetBtn">Reset Agent</button>
+      </div>
+      <div class="statline">Episodes trained: <span id="episodeCount">0</span></div>
+      <div class="statline">Last episode reward: <span id="lastReward">-</span></div>
+      <div class="statline">Last episode steps: <span id="lastSteps">-</span></div>
+      <label style="font-size:13px; font-weight:bold; color:#003366;">
+        <input type="checkbox" id="showPolicy"> Show learned policy (arrows = best known action per square)
+      </label>
+      <div id="log"></div>
+    </div>
+  </div>
+  <div style="margin-top:16px;">
+    <div style="font-size:14px; font-weight:bold; color:#003366; margin-bottom:6px;">Learning Curve: Reward per Episode</div>
+    <canvas id="learningCurve" width="860" height="160" style="border:1px solid #cdd8e3; background:#ffffff; width:100%; max-width:860px; height:160px;"></canvas>
+    <div style="font-size:12px; color:#555; margin-top:4px;">Each dot is one training episode. Watch whether the line trends upward as episodes accumulate, that upward drift is what learning actually looks like as a number, not a feeling.</div>
+  </div>
+</section>
+
+<section>
+  <h2>Step 4: Watch the Trained Agent</h2>
+  <p>Once you have trained the agent for a while, click below to watch it move with no randomness at all: it always takes the action with the highest Q-value in its current square.</p>
+  <button id="greedyBtn">Watch Trained Agent (greedy run)</button>
+</section>
+
+<section>
+  <h2>Vocabulary: What Each Term Actually Means Here</h2>
+  <div class="term"><b>State:</b> the agent's current grid square. Nothing more. It has no memory of how it got there.</div>
+  <div class="term"><b>Action:</b> one of four choices available in every state: up, down, left, right.</div>
+  <div class="term"><b>Reward:</b> the single number the environment returns after each action. It is the only feedback the agent ever receives.</div>
+  <div class="term"><b>Q-value:</b> the agent's running estimate of how good a specific action is in a specific state, based only on rewards it has actually experienced there.</div>
+  <div class="term"><b>Policy:</b> the rule the agent uses to pick an action. A greedy policy always picks the action with the highest known Q-value.</div>
+  <div class="term"><b>Episode:</b> one full run from the starting square to a terminal outcome, either the goal or the pit.</div>
+  <div class="term"><b>Exploration vs. exploitation:</b> exploration is trying a random action to see what happens. Exploitation is picking the action the agent already believes is best. Epsilon controls how often the agent explores instead of exploiting.</div>
+</section>
+<div style="text-align:center; color:#8a97a6; font-size:11px; margin-top:20px;">demo build: v4</div>
+
+</div>
+
+<script>
+const cols = 6, rows = 5, cellSize = 70;
+const walls = new Set(["2,1","2,2","2,3"]); // col,row
+const goal = {col:5,row:0};
+const pit = {col:4,row:3};
+const start = {col:0,row:4};
+
+function key(c,r){ return c+","+r; }
+function stateIndex(c,r){ return r*cols+c; }
+
+function isBlocked(c,r){
+  if(c<0||c>=cols||r<0||r>=rows) return true;
+  if(walls.has(key(c,r))) return true;
+  return false;
+}
+function isTerminal(c,r){
+  return (c===goal.col && r===goal.row) || (c===pit.col && r===pit.row);
+}
+function rewardFor(c,r){
+  if(c===goal.col && r===goal.row) return 10;
+  if(c===pit.col && r===pit.row) return -10;
+  return -1;
+}
+
+// actions: 0 up, 1 down, 2 left, 3 right
+function step(c,r,a){
+  let nc=c, nr=r;
+  if(a===0) nr = r-1;
+  if(a===1) nr = r+1;
+  if(a===2) nc = c-1;
+  if(a===3) nc = c+1;
+  if(isBlocked(nc,nr)){ nc=c; nr=r; } // bump, stays in place
+  return {c:nc, r:nr};
+}
+
+function buildGrid(holderId, withArrows){
+  const holder = document.getElementById(holderId);
+  holder.style.width = (cols*cellSize)+"px";
+  holder.style.height = (rows*cellSize)+"px";
+  holder.innerHTML = "";
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      const div = document.createElement("div");
+      div.className = "cell";
+      div.style.left = (c*cellSize)+"px";
+      div.style.top = (r*cellSize)+"px";
+      div.style.width = cellSize+"px";
+      div.style.height = cellSize+"px";
+      div.id = holderId+"_c"+c+"_"+r;
+      if(walls.has(key(c,r))) div.className += " wall";
+      else if(c===goal.col && r===goal.row){ div.className += " goal"; div.textContent = "GOAL +10"; }
+      else if(c===pit.col && r===pit.row){ div.className += " pit"; div.textContent = "PIT -10"; }
+      holder.appendChild(div);
+    }
+  }
+  const agent = document.createElement("div");
+  agent.className = "agent";
+  agent.id = holderId+"_agent";
+  agent.style.left = (start.col*cellSize + cellSize/2 - 17)+"px";
+  agent.style.top = (start.row*cellSize + cellSize/2 - 17)+"px";
+  holder.appendChild(agent);
+}
+
+function placeAgent(holderId, c, r){
+  const agent = document.getElementById(holderId+"_agent");
+  agent.style.left = (c*cellSize + cellSize/2 - 17)+"px";
+  agent.style.top = (r*cellSize + cellSize/2 - 17)+"px";
+}
+
+buildGrid("gridHolder", false);
+buildGrid("gridHolder2", true);
+
+// ---------- Random walk (no learning) ----------
+let randomTotal = 0;
+document.getElementById("randomWalkBtn").addEventListener("click", function(){
+  let c = start.col, r = start.row;
+  randomTotal = 0;
+  document.getElementById("randomReward").textContent = "0";
+  let i = 0;
+  function doStep(){
+    if(i>=60 || isTerminal(c,r)){ return; }
+    const a = Math.floor(Math.random()*4);
+    const res = step(c,r,a);
+    c = res.c; r = res.r;
+    randomTotal += rewardFor(c,r);
+    document.getElementById("randomReward").textContent = randomTotal;
+    placeAgent("gridHolder", c, r);
+    i++;
+    setTimeout(doStep, 180);
+  }
+  placeAgent("gridHolder", start.col, start.row);
+  setTimeout(doStep, 180);
+});
+
+// ---------- Q-learning ----------
+const numStates = cols*rows;
+let Q = new Array(numStates).fill(0).map(()=>[0,0,0,0]);
+let episodeCount = 0;
+let rewardHistory = [];
+
+function drawChart(){
+  const canvas = document.getElementById("learningCurve");
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0,0,w,h);
+  const windowSize = 200;
+  const data = rewardHistory.slice(-windowSize);
+  if(data.length < 2){
+    ctx.fillStyle = "#888";
+    ctx.font = "13px Arial";
+    ctx.fillText("Train a few episodes to see the curve.", 12, h/2);
+    return;
+  }
+  const minVal = Math.min(...data, -12);
+  const maxVal = Math.max(...data, 12);
+  const pad = 24;
+  const xStep = (w - pad*2) / (data.length - 1);
+  function yPos(v){
+    return h - pad - ( (v - minVal) / (maxVal - minVal) ) * (h - pad*2);
+  }
+  // zero line
+  ctx.strokeStyle = "#dddddd";
+  ctx.beginPath();
+  ctx.moveTo(pad, yPos(0));
+  ctx.lineTo(w-pad, yPos(0));
+  ctx.stroke();
+  // reward line
+  ctx.strokeStyle = "#F2A900";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  data.forEach((v,i)=>{
+    const x = pad + i*xStep;
+    const y = yPos(v);
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+  // dots
+  ctx.fillStyle = "#003366";
+  data.forEach((v,i)=>{
+    const x = pad + i*xStep;
+    const y = yPos(v);
+    ctx.beginPath();
+    ctx.arc(x,y,2,0,Math.PI*2);
+    ctx.fill();
+  });
+  ctx.fillStyle = "#555";
+  ctx.font = "11px Arial";
+  ctx.fillText(maxVal.toFixed(0), 2, yPos(maxVal)+4);
+  ctx.fillText(minVal.toFixed(0), 2, yPos(minVal)+4);
+}
+
+function recordEpisode(total, steps){
+  episodeCount++;
+  rewardHistory.push(total);
+  document.getElementById("episodeCount").textContent = episodeCount;
+  document.getElementById("lastReward").textContent = total;
+  document.getElementById("lastSteps").textContent = steps;
+  try { drawChart(); } catch(e) { /* chart is a visual extra, never block training on it */ }
+}
+
+try { drawChart(); } catch(e) { /* initial placeholder draw */ }
+
+const alphaSlider = document.getElementById("alphaSlider");
+const gammaSlider = document.getElementById("gammaSlider");
+const epsilonSlider = document.getElementById("epsilonSlider");
+alphaSlider.addEventListener("input", ()=> document.getElementById("alphaVal").textContent = alphaSlider.value);
+gammaSlider.addEventListener("input", ()=> document.getElementById("gammaVal").textContent = gammaSlider.value);
+epsilonSlider.addEventListener("input", ()=> document.getElementById("epsilonVal").textContent = epsilonSlider.value);
+
+function chooseAction(c,r,epsilon){
+  if(Math.random() < epsilon){
+    return Math.floor(Math.random()*4);
+  }
+  const q = Q[stateIndex(c,r)];
+  let best = 0;
+  for(let a=1;a<4;a++){ if(q[a] > q[best]) best = a; }
+  return best;
+}
+
+function maxQ(c,r){
+  const q = Q[stateIndex(c,r)];
+  return Math.max(q[0],q[1],q[2],q[3]);
+}
+
+function logLine(text){
+  const log = document.getElementById("log");
+  const line = document.createElement("div");
+  line.textContent = text;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+
+function runEpisode(learn, animate, callback){
+  let c = start.col, r = start.row;
+  let total = 0, steps = 0;
+  const maxSteps = 50;
+  const alpha = parseFloat(alphaSlider.value);
+  const gamma = parseFloat(gammaSlider.value);
+  const epsilon = parseFloat(epsilonSlider.value);
+  const actionNames = ["UP","DOWN","LEFT","RIGHT"];
+
+  function doStep(){
+    if(steps>=maxSteps || isTerminal(c,r)){
+      if(callback) callback(total, steps);
+      return;
+    }
+    const a = chooseAction(c,r, learn ? epsilon : 0);
+    const res = step(c,r,a);
+    const rew = rewardFor(res.c, res.r);
+    total += rew;
+    steps++;
+    if(learn){
+      const s = stateIndex(c,r);
+      const sPrime = stateIndex(res.c,res.r);
+      const future = isTerminal(res.c,res.r) ? 0 : maxQ(res.c,res.r);
+      Q[s][a] = Q[s][a] + alpha * (rew + gamma*future - Q[s][a]);
+    }
+    c = res.c; r = res.r;
+    if(animate){
+      placeAgent("gridHolder2", c, r);
+      logLine("Step "+steps+": moved "+actionNames[a]+" -> reward "+rew);
+      setTimeout(doStep, 300);
+    } else {
+      doStep();
+    }
+  }
+  doStep();
+}
+
+function renderPolicy(){
+  // clear old arrows
+  document.querySelectorAll(".arrow").forEach(el=>el.remove());
+  if(!document.getElementById("showPolicy").checked) return;
+  const arrowChar = ["\u25B2","\u25BC","\u25C0","\u25B6"];
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      if(walls.has(key(c,r)) || isTerminal(c,r)) continue;
+      const q = Q[stateIndex(c,r)];
+      let best = 0;
+      for(let a=1;a<4;a++){ if(q[a] > q[best]) best = a; }
+      if(q[best] === 0) continue;
+      const el = document.createElement("div");
+      el.className = "arrow";
+      el.textContent = arrowChar[best];
+      el.style.left = (c*cellSize + cellSize/2 - 10)+"px";
+      el.style.top = (r*cellSize + cellSize/2 - 12)+"px";
+      el.style.color = "#003366";
+      document.getElementById("gridHolder2").appendChild(el);
+    }
+  }
+}
+
+document.getElementById("showPolicy").addEventListener("change", renderPolicy);
+
+document.getElementById("train1Btn").addEventListener("click", function(){
+  document.getElementById("log").innerHTML = "";
+  placeAgent("gridHolder2", start.col, start.row);
+  runEpisode(true, true, function(total, steps){
+    recordEpisode(total, steps);
+    logLine("Episode finished. Total reward: "+total);
+    renderPolicy();
+  });
+});
+
+document.getElementById("train100Btn").addEventListener("click", function(){
+  try {
+    for(let i=0;i<100;i++){
+      runEpisode(true, false, function(total, steps){
+        recordEpisode(total, steps);
+      });
+    }
+    document.getElementById("log").innerHTML = "";
+    logLine("Ran 100 fast episodes (no animation during training). Total episodes trained: "+episodeCount);
+    document.getElementById("showPolicy").checked = true;
+    renderPolicy();
+    logLine("Showing current policy arrows, then replaying the agent's current best path below.");
+    placeAgent("gridHolder2", start.col, start.row);
+    setTimeout(function(){
+      runEpisode(false, true, function(total, steps){
+        logLine("Replay finished. Reward: "+total+", steps: "+steps);
+      });
+    }, 600);
+  } catch(err){
+    logLine("ERROR in Train 100 Episodes: "+err.message);
+  }
+});
+
+document.getElementById("resetBtn").addEventListener("click", function(){
+  Q = new Array(numStates).fill(0).map(()=>[0,0,0,0]);
+  episodeCount = 0;
+  document.getElementById("episodeCount").textContent = "0";
+  document.getElementById("lastReward").textContent = "-";
+  document.getElementById("lastSteps").textContent = "-";
+  document.getElementById("log").innerHTML = "";
+  rewardHistory = [];
+  drawChart();
+  placeAgent("gridHolder2", start.col, start.row);
+  renderPolicy();
+});
+
+document.getElementById("greedyBtn").addEventListener("click", function(){
+  document.getElementById("log").innerHTML = "";
+  placeAgent("gridHolder2", start.col, start.row);
+  logLine("Running greedy policy (no exploration)...");
+  runEpisode(false, true, function(total, steps){
+    logLine("Greedy run finished. Total reward: "+total+", steps: "+steps);
+  });
+});
+</script>
+</body>
+</html>

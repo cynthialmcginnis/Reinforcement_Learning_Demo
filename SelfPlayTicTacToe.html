@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Self-Play: How an Agent Learns Tic-Tac-Toe Against Itself</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; background: #F2F6FA; margin: 0; padding: 0; color: #1a1a1a; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 24px 24px 60px 24px; }
+  header { background: #003366; color: #ffffff; padding: 24px 28px; border-bottom: 6px solid #F2A900; }
+  header h1 { margin: 0 0 6px 0; font-size: 26px; }
+  header p { margin: 0; font-size: 15px; color: #d9e6f2; }
+  section { background: #ffffff; border: 1px solid #cdd8e3; border-radius: 6px; padding: 20px 24px; margin-top: 20px; }
+  h2 { color: #003366; font-size: 19px; margin-top: 0; border-bottom: 2px solid #F2A900; padding-bottom: 6px; }
+  .question-box { background: #F2F6FA; border-left: 6px solid #F2A900; padding: 14px 18px; font-size: 16px; line-height: 1.5; }
+  .layout { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+  .board { display: grid; grid-template-columns: repeat(3, 84px); grid-template-rows: repeat(3, 84px); gap: 4px; background: #003366; padding: 4px; border-radius: 6px; }
+  .cell {
+    background: #ffffff; display: flex; align-items: center; justify-content: center;
+    font-size: 34px; font-weight: bold; color: #003366; cursor: pointer; position: relative;
+  }
+  .cell .heat { position: absolute; top: 2px; left: 2px; font-size: 10px; color: #b3862a; font-weight: normal; }
+  .controls { flex: 1; min-width: 260px; }
+  .sliderRow { margin-bottom: 14px; font-size: 13px; }
+  .sliderRow label { display: block; margin-bottom: 3px; font-weight: bold; color: #003366; }
+  input[type=range] { width: 100%; }
+  button { background: #003366; color: #ffffff; border: none; padding: 9px 14px; border-radius: 4px; font-size: 13px; cursor: pointer; margin-right: 8px; margin-bottom: 8px; }
+  button:hover { background: #024a8f; }
+  button.secondary { background: #ffffff; color: #003366; border: 2px solid #003366; }
+  button.secondary:hover { background: #F2F6FA; }
+  .statline { font-size: 14px; margin: 4px 0; }
+  .statline span { font-weight: bold; color: #003366; }
+  #log { background: #F2F6FA; border: 1px solid #cdd8e3; border-radius: 4px; padding: 10px; height: 120px; overflow-y: auto; font-size: 12px; font-family: Consolas, monospace; margin-top: 10px; }
+  .term { border: 1px solid #cdd8e3; border-radius: 6px; padding: 12px 14px; margin-bottom: 10px; background: #F2F6FA; }
+  .term b { color: #003366; }
+  #resultMsg { font-weight: bold; color: #003366; margin-top: 10px; min-height: 20px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Self-Play: How an Agent Learns Tic-Tac-Toe Against Itself</h1>
+  <p>Unit 4: Computer/Machine Vision and Reinforcement Learning</p>
+</header>
+
+<section>
+  <h2>Step 1: Play Against a Completely Untrained Agent</h2>
+  <p>You are X. The agent is O. Right now the agent has played zero games. It will move at random. Play a full game and see how it does.</p>
+  <div class="layout">
+    <div class="board" id="board"></div>
+    <div class="controls">
+      <div id="resultMsg"></div>
+      <button class="secondary" id="newGameBtn">New Game</button>
+      <div class="statline">Games trained so far: <span id="trainedCount">0</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Step 2: The Question This Demo Answers</h2>
+  <div class="question-box">
+    Nobody is going to hand this agent a database of expert tic-tac-toe games. Instead, it is going to play against a copy of itself, thousands of times in a row, learning only from whether each finished game was a win, a loss, or a draw.
+    <br><br>
+    Can an agent become genuinely hard to beat using nothing but its own games against itself, the same basic idea behind DeepMind's AlphaGo and AlphaZero, just on a board small enough to fully explore?
+  </div>
+</section>
+
+<section>
+  <h2>Step 3: Let It Train Against Itself</h2>
+  <p>Click below to have the agent play itself many times in the background. It gets a reward of +1 for a win, -1 for a loss, and 0 for a draw, credited backward through every move it made in that game. Then play against it again in Step 1's board and see if it got harder to beat.</p>
+  <button id="train1000Btn">Train 1,000 Self-Play Games</button>
+  <button id="train5000Btn">Train 5,000 Self-Play Games</button>
+  <button class="secondary" id="resetBtn">Reset Agent</button>
+  <div id="log"></div>
+</section>
+
+<section>
+  <h2>Step 4: See What It Learned</h2>
+  <p>Check the box below, then hover over the board in Step 1 before you move. The small number in the corner of each empty square is the agent's current estimated value of X moving there, learned entirely from self-play, not programmed in.</p>
+  <label style="font-size:13px; font-weight:bold; color:#003366;">
+    <input type="checkbox" id="showHeat"> Show learned move values on the board
+  </label>
+</section>
+
+<section>
+  <h2>Vocabulary: What Each Term Means Here</h2>
+  <div class="term"><b>Self-play:</b> training an agent by having it compete against a copy of itself rather than against human data or a fixed opponent. Both sides improve together, which keeps generating harder and harder practice as training goes on.</div>
+  <div class="term"><b>Terminal reward:</b> a reward that only arrives at the very end of an episode, here plus one for a win, minus one for a loss, zero for a draw. Every move earlier in the game had to have its value inferred backward from that single end-of-game signal.</div>
+  <div class="term"><b>Credit assignment:</b> the problem of figuring out which of the many moves in a finished game actually deserved credit for the win or blame for the loss. This is a much harder version of the same problem the grid-world agent solved one step at a time.</div>
+</section>
+
+</div>
+
+<script>
+// Board is 9 cells, 0=empty, 1=X (human), 2=O (agent)
+let board = new Array(9).fill(0);
+let Q = {}; // key: boardString+turn -> array of 9 values (for empty cells only meaningful)
+let trainedGames = 0;
+
+function boardKey(b){ return b.join(""); }
+function getQ(key){
+  if(!Q[key]) Q[key] = new Array(9).fill(0);
+  return Q[key];
+}
+
+const wins = [
+  [0,1,2],[3,4,5],[6,7,8],
+  [0,3,6],[1,4,7],[2,5,8],
+  [0,4,8],[2,4,6]
+];
+function checkWinner(b){
+  for(const [a,c,d] of wins){
+    if(b[a]!==0 && b[a]===b[c] && b[c]===b[d]) return b[a];
+  }
+  if(b.every(v=>v!==0)) return 3; // draw
+  return 0; // ongoing
+}
+function emptyCells(b){
+  const r = [];
+  for(let i=0;i<9;i++) if(b[i]===0) r.push(i);
+  return r;
+}
+
+// ---------- Rendering the human-playable board ----------
+function renderBoard(){
+  const holder = document.getElementById("board");
+  holder.innerHTML = "";
+  const key = boardKey(board);
+  const q = Q[key];
+  const showHeat = document.getElementById("showHeat").checked;
+  for(let i=0;i<9;i++){
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    if(board[i]===1) cell.textContent = "X";
+    else if(board[i]===2) cell.textContent = "O";
+    else {
+      cell.addEventListener("click", ()=>humanMove(i));
+      if(showHeat && q){
+        const heat = document.createElement("div");
+        heat.className = "heat";
+        heat.textContent = q[i].toFixed(1);
+        cell.appendChild(heat);
+      }
+    }
+    holder.appendChild(cell);
+  }
+}
+
+function humanMove(i){
+  if(board[i] !== 0) return;
+  board[i] = 1;
+  const w = checkWinner(board);
+  renderBoard();
+  if(w !== 0){ endGame(w); return; }
+  setTimeout(agentMove, 300);
+}
+
+function agentMove(){
+  const key = boardKey(board);
+  const q = getQ(key);
+  const empties = emptyCells(board);
+  if(empties.length === 0) return;
+  // epsilon-greedy at play time too, but mostly greedy since this is "showing off" trained knowledge
+  let best = empties[0];
+  let bestVal = -Infinity;
+  empties.forEach(i => { if(q[i] > bestVal){ bestVal = q[i]; best = i; } });
+  board[best] = 2;
+  const w = checkWinner(board);
+  renderBoard();
+  if(w !== 0){ endGame(w); }
+}
+
+function endGame(w){
+  const msg = document.getElementById("resultMsg");
+  if(w===1) msg.textContent = "You win.";
+  else if(w===2) msg.textContent = "The agent wins.";
+  else msg.textContent = "Draw.";
+}
+
+document.getElementById("newGameBtn").addEventListener("click", function(){
+  board = new Array(9).fill(0);
+  document.getElementById("resultMsg").textContent = "";
+  renderBoard();
+});
+document.getElementById("showHeat").addEventListener("change", renderBoard);
+
+renderBoard();
+
+// ---------- Self-play training ----------
+function playSelfPlayGame(){
+  let b = new Array(9).fill(0);
+  const history1 = []; // states+action for player 1 (X)
+  const history2 = []; // for player 2 (O)
+  let turn = 1;
+  const epsilon = 0.2;
+  while(true){
+    const key = boardKey(b);
+    const q = getQ(key);
+    const empties = emptyCells(b);
+    let action;
+    if(Math.random() < epsilon){
+      action = empties[Math.floor(Math.random()*empties.length)];
+    } else {
+      let best = empties[0], bestVal = -Infinity;
+      empties.forEach(i => { if(q[i] > bestVal){ bestVal = q[i]; best = i; } });
+      action = best;
+    }
+    if(turn === 1) history1.push({key, action});
+    else history2.push({key, action});
+    b[action] = turn;
+    const w = checkWinner(b);
+    if(w !== 0){
+      // assign terminal rewards and back-propagate with simple TD update
+      const rewardFor1 = w===1 ? 1 : (w===3 ? 0 : -1);
+      const rewardFor2 = w===2 ? 1 : (w===3 ? 0 : -1);
+      updateHistory(history1, rewardFor1);
+      updateHistory(history2, rewardFor2);
+      return w;
+    }
+    turn = turn === 1 ? 2 : 1;
+  }
+}
+
+function updateHistory(history, finalReward){
+  const alpha = 0.3;
+  // propagate backward: last move gets the terminal reward directly,
+  // earlier moves get a discounted version of what followed
+  let nextValue = finalReward;
+  for(let i=history.length-1; i>=0; i--){
+    const {key, action} = history[i];
+    const q = getQ(key);
+    q[action] = q[action] + alpha * (nextValue - q[action]);
+    nextValue = q[action] * 0.9;
+  }
+}
+
+function trainGames(n){
+  for(let i=0;i<n;i++){
+    playSelfPlayGame();
+    trainedGames++;
+  }
+  document.getElementById("trainedCount").textContent = trainedGames;
+}
+
+function logLine(text){
+  const log = document.getElementById("log");
+  const line = document.createElement("div");
+  line.textContent = text;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+
+document.getElementById("train1000Btn").addEventListener("click", function(){
+  trainGames(1000);
+  logLine("Trained 1,000 self-play games. Total: "+trainedGames);
+  renderBoard();
+});
+document.getElementById("train5000Btn").addEventListener("click", function(){
+  trainGames(5000);
+  logLine("Trained 5,000 self-play games. Total: "+trainedGames);
+  renderBoard();
+});
+document.getElementById("resetBtn").addEventListener("click", function(){
+  Q = {};
+  trainedGames = 0;
+  document.getElementById("trainedCount").textContent = "0";
+  document.getElementById("log").innerHTML = "";
+  board = new Array(9).fill(0);
+  document.getElementById("resultMsg").textContent = "";
+  renderBoard();
+});
+</script>
+</body>
+</html>
